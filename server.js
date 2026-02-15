@@ -40,6 +40,20 @@ const getClientIP = (req) => {
 
 // ========== API ROUTES ==========
 
+// Root route - API status
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Real-Time Poll API is running',
+    version: '1.0.0',
+    endpoints: {
+      createPoll: 'POST /api/polls',
+      getPoll: 'GET /api/polls/:pollId',
+      vote: 'POST /api/polls/:pollId/vote'
+    }
+  });
+});
+
 // Create a new poll
 app.post('/api/polls', async (req, res) => {
   try {
