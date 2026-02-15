@@ -10,12 +10,19 @@ const { nanoid } = require('nanoid');
 
 const app = express();
 const server = http.createServer(app);
+
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.FRONTEND_URL 
-      : 'http://localhost:3000',
-    methods: ['GET', 'POST']
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
   },
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
@@ -24,7 +31,19 @@ const io = new Server(server, {
 
 // Middleware
 app.use(compression()); // Enable gzip compression
-app.use(cors());
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '1mb' })); // Limit payload size
 
 // Connect to MongoDB
@@ -87,7 +106,11 @@ app.post('/api/polls', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating poll:', error);
-    res.status(500).json({ error: 'Failed to create poll' });
+    res.status(500).json({ 
+      error: 'Failed to create poll',
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
