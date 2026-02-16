@@ -178,6 +178,8 @@ app.post('/api/polls/:pollId/vote', async (req, res) => {
       success: true,
       message: 'Vote recorded successfully',
       poll: {
+        pollId: poll.pollId,
+        question: poll.question,
         options: poll.options,
         totalVotes: poll.totalVotes
       }
