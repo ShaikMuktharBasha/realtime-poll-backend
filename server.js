@@ -57,6 +57,26 @@ const getClientIP = (req) => {
          req.socket.remoteAddress;
 };
 
+// ANTI-ABUSE MECHANISM #2: Rate Limiting
+// In-memory store for vote timestamps (pollId -> {ip -> timestamp})
+const voteTimestamps = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 60 seconds in milliseconds
+
+// Clean up old timestamps every 5 minutes to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [pollId, ipMap] of voteTimestamps.entries()) {
+    for (const [ip, timestamp] of ipMap.entries()) {
+      if (now - timestamp > RATE_LIMIT_WINDOW * 2) {
+        ipMap.delete(ip);
+      }
+    }
+    if (ipMap.size === 0) {
+      voteTimestamps.delete(pollId);
+    }
+  }
+}, 5 * 60 * 1000);
+
 // ========== API ROUTES ==========
 
 // Root route - API status
@@ -149,6 +169,7 @@ app.post('/api/polls/:pollId/vote', async (req, res) => {
   try {
     const { pollId } = req.params;
     const { optionIndex } = req.body;
+    const clientIP = getClientIP(req);
 
     // Find poll
     const poll = await Poll.findOne({ pollId });
@@ -161,6 +182,27 @@ app.post('/api/polls/:pollId/vote', async (req, res) => {
     if (optionIndex < 0 || optionIndex >= poll.options.length) {
       return res.status(400).json({ error: 'Invalid option' });
     }
+
+    // ANTI-ABUSE MECHANISM #2: Rate Limiting Check
+    // Prevent voting more than once per 60 seconds from same IP
+    if (!voteTimestamps.has(pollId)) {
+      voteTimestamps.set(pollId, new Map());
+    }
+    
+    const pollVotes = voteTimestamps.get(pollId);
+    const lastVoteTime = pollVotes.get(clientIP);
+    const now = Date.now();
+    
+    if (lastVoteTime && (now - lastVoteTime) < RATE_LIMIT_WINDOW) {
+      const remainingTime = Math.ceil((RATE_LIMIT_WINDOW - (now - lastVoteTime)) / 1000);
+      return res.status(429).json({ 
+        error: `Please wait ${remainingTime} seconds before voting again`,
+        remainingTime
+      });
+    }
+
+    // Record this vote timestamp
+    pollVotes.set(clientIP, now);
 
     // Update vote count
     poll.options[optionIndex].votes += 1;
