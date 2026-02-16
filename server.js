@@ -126,10 +126,6 @@ app.get('/api/polls/:pollId', async (req, res) => {
       return res.status(404).json({ error: 'Poll not found' });
     }
 
-    // Check if this IP has already voted
-    const clientIP = getClientIP(req);
-    const hasVoted = poll.votedIPs.includes(clientIP);
-
     // Set cache headers for better performance
     res.set('Cache-Control', 'no-cache');
     
@@ -139,8 +135,7 @@ app.get('/api/polls/:pollId', async (req, res) => {
         pollId: poll.pollId,
         question: poll.question,
         options: poll.options,
-        totalVotes: poll.totalVotes,
-        hasVoted
+        totalVotes: poll.totalVotes
       }
     });
   } catch (error) {
@@ -154,7 +149,6 @@ app.post('/api/polls/:pollId/vote', async (req, res) => {
   try {
     const { pollId } = req.params;
     const { optionIndex } = req.body;
-    const clientIP = getClientIP(req);
 
     // Find poll
     const poll = await Poll.findOne({ pollId });
@@ -168,17 +162,9 @@ app.post('/api/polls/:pollId/vote', async (req, res) => {
       return res.status(400).json({ error: 'Invalid option' });
     }
 
-    // ANTI-CHEATING PROTECTION #1: IP-based voting restriction
-    if (poll.votedIPs.includes(clientIP)) {
-      return res.status(403).json({ 
-        error: 'You have already voted on this poll' 
-      });
-    }
-
     // Update vote count
     poll.options[optionIndex].votes += 1;
     poll.totalVotes += 1;
-    poll.votedIPs.push(clientIP);
 
     await poll.save();
 
